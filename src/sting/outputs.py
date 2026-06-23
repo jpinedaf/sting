@@ -138,7 +138,7 @@ def plot_fitting_results(
     ra_sigma, dec_sigma, v_sigma = streamer.uncertainties
  
     # Loss
-    plot_loss(loss_history, save_folder=save_folder)
+    plot_loss(loss_history, save_folder=save_folder, show=show_plots)
  
     # evaluate best fit morphology and belocity-radius
     best_fit = evaluate_best_fit(ordered_best_opt_params, fixed_params, streamer.data, distance_pc, by_eye_params=by_eye_params)
@@ -293,7 +293,7 @@ def create_video_from_images(save_folder, input_pattern, output_name, fps=5):
     except subprocess.CalledProcessError as e:
         print(f"Error creating video: {e}")
 
-def plot_loss(loss_history, save_folder='sting_results'):
+def plot_loss(loss_history, save_folder='sting_results', show=False):
     '''Plot loss as a function of epochs'''
     # plot loss vs epoch nicely
     # matplotlib serif font
@@ -312,8 +312,10 @@ def plot_loss(loss_history, save_folder='sting_results'):
     if save_folder is not None:
         os.makedirs(save_folder, exist_ok=True)
         plt.savefig(f'{save_folder}/loss_history.png', dpi=300, bbox_inches='tight')
-    else:
+    if show:
         plt.show()
+    else:
+        plt.close()
 
 
 def make_morphology_background(pc_coords, metric_boundaries, ra_lim, dec_lim, figsize=(6.5, 7)):
@@ -1515,6 +1517,7 @@ def plot_streamline_covariance_samples(best_opt_params,
     if save_folder is not None:
         os.makedirs(save_folder, exist_ok=True)
         plt.savefig(f'{save_folder}/streamline_covariance_samples.png', dpi=300, bbox_inches='tight')
+        plt.show()
     else:
         plt.show()
 
@@ -1643,6 +1646,7 @@ def plot_param_optimisation_history(save_folder='sting_results'):
     if save_folder is not None:
         os.makedirs(save_folder, exist_ok=True)
         plt.savefig(f'{save_folder}/parameter_optimisation_history.png', dpi=300, bbox_inches='tight')
+        plt.show()
     else:
         plt.show()
 

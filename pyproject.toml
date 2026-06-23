@@ -12,7 +12,7 @@ dependencies = [
     "pandas==3.0.3",
     "spectral_cube==0.6.7"
 ]
-name = "sting_astro"
+name = "sting"
 requires-python = ">=3.12"
 authors = [{ name="Lauren Mason", email="lmason@mpe.mpg.de" }]
 maintainers = [{ name="Lauren Mason", email="lmason@mpe.mpg.de" }]
@@ -40,6 +40,10 @@ version_file = "src/sting/_version.py"
 [tool.pytest.ini_options]
 pythonpath = "src/"
 addopts = ["--ignore=src/sting/_version.py"]
+testpaths = ["tests"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
 
 [project.urls]
 Homepage = "https://github.com/Lauren4476/STING"
