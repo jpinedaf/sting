@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 dependencies = [
-    "numpy",
-    "astropy",
-    "jax",
-    "optax",
-    "matplotlib",
-    "pandas",
-    "spectral_cube"
+    "numpy"==2.5.0,
+    "astropy"==8.0.0,
+    "jax"==0.10.2,
+    "optax"==0.2.8,
+    "matplotlib"==3.11.0,
+    "pandas"==3.0.3,
+    "spectral_cube"==0.6.7
 ]
 name = "sting_astro"
 requires-python = ">=3.12"
