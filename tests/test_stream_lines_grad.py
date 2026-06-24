@@ -3,7 +3,7 @@ Initial tests for stream_lines_grad.py
 
 Tests cover the pure mathematical functions that can be exercised directly
 without stubs or real observational data:
-  - Module-level constants (G, au_in_km, eps, FLOAT_DTYPE)
+  - Module-level constants (G, au_to_km, eps, FLOAT_DTYPE)
   - v_k: Keplerian velocity
   - r_cent / omega_from_mu / mu_from_omega: centrifugal radius and round-trips
   - safe_arccos: clipping and boundary behaviour
@@ -31,7 +31,7 @@ import sting.stream_lines_grad as slg
 
 # Convenient aliases
 G          = slg.G
-au_in_km   = slg.au_in_km
+au_to_km   = slg.au_to_km
 eps        = slg.eps
 
 # ---------------------------------------------------------------------------
@@ -59,8 +59,8 @@ class TestModuleConstants:
         # G in au (km/s)^2 Msol^-1 ≈ 887.13
         assert 1e2 < G < 1e3
 
-    def test_au_in_km(self):
-        assert pytest.approx(au_in_km, rel=1e-4) == 1.4959787e8
+    def test_au_to_km(self):
+        assert pytest.approx(au_to_km, rel=1e-4) == 1.4959787e8
 
     def test_eps_small_positive(self):
         assert 0 < eps < 1e-4

@@ -19,7 +19,7 @@ from . import stream_lines_grad, extract_streamline, gradient_descent
 ## constants 
 eps = 1e-8 # small value to avoid division by zero
 G = 6.67430e-11 * (1e-3)**2 * (1.988416e30) / (1.4959787e11) # in au (km/s)^2 * Msol^-1
-au_in_km = 1.4959787e8 #km
+au_to_km = 1.4959787e8 #km
 FLOAT_DTYPE = jnp.float64
 
 # settings and constants

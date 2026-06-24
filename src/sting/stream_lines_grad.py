@@ -29,7 +29,7 @@ from typing import NamedTuple
 eps = 1e-8 # small value to avoid division by zero
 FLOAT_DTYPE = jnp.float64
 G = 6.67430e-11 * (1e-3)**2 * (1.988416e30) / (1.4959787e11) # in au (km/s)^2 * Msol^-1
-au_in_km = 1.4959787e8 #km
+au_to_km = 1.4959787e8 #km
 
 
 ## important streamline quantities (for easy reuse)
@@ -71,13 +71,13 @@ def r_cent(mass, omega=1e-14, r0=1e4):
     :return: r_cent, au
     '''
     r_cent = (jnp.power(r0, 4) * jnp.power(omega, 2) / (G * mass)) # in au^3 km^-2
-    r_cent_au = r_cent * (jnp.power(au_in_km, 2)) # in au
+    r_cent_au = r_cent * (jnp.power(au_to_km, 2)) # in au
     return r_cent_au
 
 @jax.jit
 def omega_from_mu(mu, mass, r0):
     omega_squared = mu * G * mass / jnp.power(r0, 3) # in km^2 au^-3
-    omega = jnp.sqrt(omega_squared) / au_in_km # in 1/s
+    omega = jnp.sqrt(omega_squared) / au_to_km # in 1/s
     return omega
 
 @jax.jit

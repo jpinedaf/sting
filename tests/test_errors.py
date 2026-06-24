@@ -689,8 +689,8 @@ class TestModuleConstants:
         # G in au (km/s)^2 Msol^-1 should be ~887.13...
         assert 1e2 < errors_module.G < 1e3
 
-    def test_au_in_km(self):
-        assert pytest.approx(errors_module.au_in_km, rel=1e-4) == 1.4959787e8
+    def test_au_to_km(self):
+        assert pytest.approx(errors_module.au_to_km, rel=1e-4) == 1.4959787e8
 
     def test_eps_small_positive(self):
         assert 0 < errors_module.eps < 1e-4
