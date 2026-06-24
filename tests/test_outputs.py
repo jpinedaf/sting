@@ -12,11 +12,13 @@ Run with:
 
 import json
 import math
-import os
+
+# import os
 import sys
 import types
 
 import matplotlib
+
 matplotlib.use("Agg")  # non-interactive backend – must come before pyplot import
 
 import matplotlib.pyplot as plt
@@ -78,13 +80,16 @@ plot_loss_panel = outputs_module.plot_loss_panel
 build_velocity_radius_kde = outputs_module.build_velocity_radius_kde
 plot_param_uncertainties = outputs_module.plot_param_uncertainties
 plot_param_correlations = outputs_module.plot_param_correlations
-sample_parameter_sets_from_covariance = outputs_module.sample_parameter_sets_from_covariance
+sample_parameter_sets_from_covariance = (
+    outputs_module.sample_parameter_sets_from_covariance
+)
 load_optimisation_log = outputs_module.load_optimisation_log
 
 
 # ===========================================================================
 # Helpers
 # ===========================================================================
+
 
 def _make_log_csv(tmp_path, epochs, loss, extra_cols=None):
     """Write a minimal optimisation_log.csv to *tmp_path*."""
@@ -99,6 +104,7 @@ def _make_log_csv(tmp_path, epochs, loss, extra_cols=None):
 # ===========================================================================
 # param_for_display
 # ===========================================================================
+
 
 class TestParamForDisplay:
     """Unit tests for param_for_display."""
@@ -143,6 +149,7 @@ class TestParamForDisplay:
 # save_best_fit_params
 # ===========================================================================
 
+
 class TestSaveBestFitParams:
     """Tests for save_best_fit_params – exercises JSON output structure."""
 
@@ -172,7 +179,10 @@ class TestSaveBestFitParams:
         )
         with open(tmp_path / "best_fit_params.json") as f:
             data = json.load(f)
-        assert pytest.approx(data["optimised_parameters"]["inc"]["value"], rel=1e-9) == 180.0
+        assert (
+            pytest.approx(data["optimised_parameters"]["inc"]["value"], rel=1e-9)
+            == 180.0
+        )
         assert data["optimised_parameters"]["inc"]["unit"] == "deg"
 
     def test_non_angle_param_unit_preserved(self, tmp_path):
@@ -216,6 +226,7 @@ class TestSaveBestFitParams:
 # _ensure_clean_dir
 # ===========================================================================
 
+
 class TestEnsureCleanDir:
     def test_creates_missing_directory(self, tmp_path):
         new_dir = tmp_path / "created"
@@ -241,6 +252,7 @@ class TestEnsureCleanDir:
 # _opt_params_from_log
 # ===========================================================================
 
+
 class TestOptParamsFromLog:
     def test_skips_epoch_and_loss_columns(self):
         df = pd.DataFrame({"epoch": [0], "loss": [1.0], "r0": [100.0], "inc": [0.5]})
@@ -251,7 +263,14 @@ class TestOptParamsFromLog:
 
     def test_mu_present_excludes_rc_and_omega(self):
         df = pd.DataFrame(
-            {"epoch": [0], "loss": [1.0], "mu": [0.5], "rc": [10.0], "omega": [1e-13], "r0": [100.0]}
+            {
+                "epoch": [0],
+                "loss": [1.0],
+                "mu": [0.5],
+                "rc": [10.0],
+                "omega": [1e-13],
+                "r0": [100.0],
+            }
         )
         cols = _opt_params_from_log(df)
         assert "rc" not in cols
@@ -260,9 +279,7 @@ class TestOptParamsFromLog:
         assert "r0" in cols
 
     def test_no_mu_keeps_rc_and_omega(self):
-        df = pd.DataFrame(
-            {"epoch": [0], "loss": [1.0], "rc": [10.0], "omega": [1e-13]}
-        )
+        df = pd.DataFrame({"epoch": [0], "loss": [1.0], "rc": [10.0], "omega": [1e-13]})
         cols = _opt_params_from_log(df)
         assert "rc" in cols
         assert "omega" in cols
@@ -275,6 +292,7 @@ class TestOptParamsFromLog:
 # ===========================================================================
 # load_optimisation_log
 # ===========================================================================
+
 
 class TestLoadOptimisationLog:
     def test_returns_dataframe(self, tmp_path):
@@ -297,6 +315,7 @@ class TestLoadOptimisationLog:
 # ===========================================================================
 # plot_loss  (smoke test – checks file is written and valid PNG)
 # ===========================================================================
+
 
 class TestPlotLoss:
     def test_saves_png(self, tmp_path):
@@ -321,6 +340,7 @@ class TestPlotLoss:
 # plot_loss_panel (unit-level)
 # ===========================================================================
 
+
 class TestPlotLossPanel:
     def test_green_scatter_at_best_epoch(self):
         fig, ax = plt.subplots()
@@ -328,8 +348,11 @@ class TestPlotLossPanel:
         loss = np.array([1.0, 0.5, 0.1, 0.3])
         plot_loss_panel(ax, epochs, loss)
         # The best scatter should be at epoch 2 (minimum loss)
-        scatter = [c for c in ax.get_children()
-                   if isinstance(c, matplotlib.collections.PathCollection)]
+        scatter = [
+            c
+            for c in ax.get_children()
+            if isinstance(c, matplotlib.collections.PathCollection)
+        ]
         assert len(scatter) >= 1
         plt.close(fig)
 
@@ -343,6 +366,7 @@ class TestPlotLossPanel:
 # ===========================================================================
 # build_velocity_radius_kde
 # ===========================================================================
+
 
 class TestBuildVelocityRadiusKde:
     @pytest.fixture
@@ -378,7 +402,9 @@ class TestBuildVelocityRadiusKde:
         ra = rng.uniform(-5, 5, 50)
         dec = rng.uniform(-5, 5, 50)
         v = rng.uniform(-10, 10, 50)
-        result = build_velocity_radius_kde(ra, dec, v, xmin=0, xmax=10, ymin=-20, ymax=20)
+        result = build_velocity_radius_kde(
+            ra, dec, v, xmin=0, xmax=10, ymin=-20, ymax=20
+        )
         assert result["xlim"] == (0, 10)
         assert result["ylim"] == (-20, 20)
 
@@ -402,6 +428,7 @@ class TestBuildVelocityRadiusKde:
 # plot_param_uncertainties (smoke)
 # ===========================================================================
 
+
 class TestPlotParamUncertainties:
     def test_saves_png(self, tmp_path):
         keys = ["r0", "inc", "mass"]
@@ -411,13 +438,16 @@ class TestPlotParamUncertainties:
         assert (tmp_path / "parameter_uncertainties.png").exists()
 
     def test_single_parameter(self, tmp_path):
-        plot_param_uncertainties(["r0"], np.array([100.0]), np.array([5.0]), save_folder=str(tmp_path))
+        plot_param_uncertainties(
+            ["r0"], np.array([100.0]), np.array([5.0]), save_folder=str(tmp_path)
+        )
         assert (tmp_path / "parameter_uncertainties.png").exists()
 
 
 # ===========================================================================
 # plot_param_correlations (smoke + correctness)
 # ===========================================================================
+
 
 class TestPlotParamCorrelations:
     def _identity_cov(self, n):
@@ -445,12 +475,15 @@ class TestPlotParamCorrelations:
 
     def test_no_annotate_does_not_raise(self, tmp_path):
         cov = self._identity_cov(2)
-        plot_param_correlations(["a", "b"], cov, annotate=False, save_folder=str(tmp_path))
+        plot_param_correlations(
+            ["a", "b"], cov, annotate=False, save_folder=str(tmp_path)
+        )
 
 
 # ===========================================================================
 # sample_parameter_sets_from_covariance
 # ===========================================================================
+
 
 class TestSampleParameterSetsFromCovariance:
     @pytest.fixture
@@ -479,7 +512,9 @@ class TestSampleParameterSetsFromCovariance:
 
     def test_sample_mean_close_to_input(self, simple_setup):
         params, cov, keys = simple_setup
-        samples = sample_parameter_sets_from_covariance(params, cov, keys, n_samples=5000)
+        samples = sample_parameter_sets_from_covariance(
+            params, cov, keys, n_samples=5000
+        )
         # With enough samples the mean should be close to the true mean
         np.testing.assert_allclose(samples.mean(axis=0), [100.0, 0.5], atol=0.3)
 

@@ -37,13 +37,34 @@ classifiers = [
 [tool.setuptools_scm]
 version_file = "src/sting/_version.py"
 
+[tool.setuptools]
+include-package-data = true
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
 [tool.pytest.ini_options]
 pythonpath = "src/"
 addopts = ["--ignore=src/sting/_version.py"]
 testpaths = ["tests"]
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[tool.coverage.run]
+branch = true
+source = ["sting"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug",
+    "if __name__ == .__main__.:",
+]
+ignore_errors = true
+
+[tool.coverage.html]
+directory = "coverage_html_report"
 
 [project.urls]
 Homepage = "https://github.com/Lauren4476/STING"

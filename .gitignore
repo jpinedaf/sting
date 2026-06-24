@@ -4,6 +4,7 @@ __pycache__/
 *$py.class
 
 _version.py
+.coverage
 
 # Distribution / packaging
 .Python
