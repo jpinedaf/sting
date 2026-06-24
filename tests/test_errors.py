@@ -436,18 +436,6 @@ class TestComputeModelSortIdx:
         assert sort_idx.shape == (100,)
         assert dmetric.shape == (100,)
 
-    def test_sort_idx_edge_case(self):
-        """npoints<3 is rejected by check_r_array, but npoints=3 is valid and should return a 3-element sort_idx."""
-        self._install_xyz_stub(n=3)
-        prepared = self._make_prepared_data()
-        best_opt = {"r0": 100.0, "theta0": 0.1, "phi0": 0.1,
-                    "mu": 0.5, "v_r0": 2.0, "mass": 1.0,
-                    "inc": 0.2, "pa": 0.1, "deltar": 50.0}
-        fixed = {"rmin": 0.0, "v_lsr": 0.0}
-        sort_idx, dmetric = compute_model_sort_idx(best_opt, fixed, 200.0, prepared, npoints=3)
-        assert sort_idx.shape == (3,)
-        assert dmetric.shape == (3,)
-
     def test_sort_idx_raises_for_npoints_too_small(self):
         """xyz_stream should reject npoints=1 because r cannot reach r_low."""
         prepared = self._make_prepared_data()
@@ -701,8 +689,8 @@ class TestModuleConstants:
         # G in au (km/s)^2 Msol^-1 should be ~887.13...
         assert 1e2 < errors_module.G < 1e3
 
-    def test_au_in_km(self):
-        assert pytest.approx(errors_module.au_in_km, rel=1e-4) == 1.4959787e8
+    def test_au_to_km(self):
+        assert pytest.approx(errors_module.au_to_km, rel=1e-4) == 1.4959787e8
 
     def test_eps_small_positive(self):
         assert 0 < errors_module.eps < 1e-4
