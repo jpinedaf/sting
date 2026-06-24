@@ -393,7 +393,7 @@ def xyz_stream(mass=0.5, r0=1e4, theta0=jnp.radians(30),
 
     # r is values internal to the initial radius r0 for computation
     # r_mask is used to mask out points that are outside the valid range, but we still need to compute them for jax/jit compatibility
-    r = (r0 - deltar) - jnp.arange(npoints, dtype=FLOAT_DTYPE) * deltar
+    r = (r0 - deltar) - jnp.arange(npoints-1, dtype=FLOAT_DTYPE) * deltar
     check_r_array(r, r_low)
     r_mask = r > r_low
     
