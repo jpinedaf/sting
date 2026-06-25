@@ -1062,13 +1062,13 @@ def evaluate_initial_guess(
 
 
 def fit_streamline(initial_opt_params, fixed_params, streamer, distance_pc,
-                   learning_rate=0.001, param_bounds=None, n_epochs=1000,
+                   learning_rate=0.01, param_bounds=None, n_epochs=1000,
                    beta1=0.9, beta2=0.999,
                    info_every=100, loss_threshold=None, loss_threshold_epochs=1,
                    gradient_tol=None, gradient_tol_epochs=1,
                    early_stopping_patience=50,
                    save_folder='sting_results',
-                   loss_method=0, # 0: radecvel, 1: rthetavel
+                   loss_method=1, # 0: radecvel, 1: rthetavel
                    v_lsr=None,
                    show_plots=False
                    ):

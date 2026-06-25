@@ -1,13 +1,10 @@
 """
-Initial tests for outputs.py
+Tests for outputs.py
 
 Tests cover pure/logic functions that can be exercised without the full JAX
 forward model or filesystem side-effects, plus lightweight smoke tests for the
 I/O and plotting helpers (using tmp_path and matplotlib's non-interactive
 Agg backend).
-
-Run with:
-    pytest test_outputs.py -v
 """
 
 import json
@@ -84,6 +81,10 @@ sample_parameter_sets_from_covariance = (
     outputs_module.sample_parameter_sets_from_covariance
 )
 load_optimisation_log = outputs_module.load_optimisation_log
+plot_morphology = outputs_module.plot_morphology
+plot_ra_vel = outputs_module.plot_ra_vel
+plot_dec_vel = outputs_module.plot_dec_vel
+plot_vel_radius = outputs_module.plot_vel_radius
 
 
 # ===========================================================================
@@ -99,6 +100,25 @@ def _make_log_csv(tmp_path, epochs, loss, extra_cols=None):
     df = pd.DataFrame(data)
     df.to_csv(tmp_path / "optimisation_log.csv", index=False)
     return df
+
+def _make_streamer(n=8):
+    """Return a minimal SimpleNamespace object that mimics the Streamer namedtuple in the real code."""
+    rng = np.random.default_rng(42)
+    # Generate some random RA, Dec, and velocity values for the streamer data 1D streamline
+    ra = rng.uniform(-5.0, 5.0, n)
+    dec = rng.uniform(-5.0, 5.0, n)
+    v = rng.uniform(-3.0, 3.0, n)
+    sig = np.full(n, 0.1)  # constant uncertainty for simplicity
+    # Generate some random point cloud coordinates that the streamer data came from
+    pc_coords=(
+        rng.uniform(-6.0, 6.0, 30),
+        rng.uniform(-6.0, 6.0, 30),
+        rng.uniform(-4.0, 4.0, 30)
+    )
+
+    import types
+    s = types.SimpleNamespace(ra_data=ra, dec_data=dec, v_data=v, ra_sigma=sig, dec_sigma=sig, v_sigma=sig, pc_coords=pc_coords, data=(ra, dec, v), uncertainties=(sig, sig, sig))
+    return s
 
 
 # ===========================================================================
@@ -220,6 +240,29 @@ class TestSaveBestFitParams:
         nested = tmp_path / "new_dir" / "sub"
         save_best_fit_params({"r0": 1.0}, {}, None, str(nested))
         assert (nested / "best_fit_params.json").exists()
+
+    def test_angle_error_stored_in_degrees(self, tmp_path):
+        save_best_fit_params(
+            best_opt_params={"inc": math.pi / 6},   # 30 deg
+            fixed_params={},
+            param_errors={"inc": math.pi / 180},    # 1 deg in radians
+            save_folder=str(tmp_path),
+        )
+        with open(tmp_path / "best_fit_params.json") as f:
+            data = json.load(f)
+        sigma = data["optimised_parameters"]["inc"]["sigma"]
+        assert pytest.approx(sigma, rel=1e-6) == 1.0  # should be 1 deg, not ~0.0175 rad
+
+    def test_non_angle_error_stored_as_is(self, tmp_path):
+        save_best_fit_params(
+            best_opt_params={"r0": 100.0},
+            fixed_params={},
+            param_errors={"r0": 7.5},
+            save_folder=str(tmp_path),
+        )
+        with open(tmp_path / "best_fit_params.json") as f:
+            data = json.load(f)
+        assert pytest.approx(data["optimised_parameters"]["r0"]["sigma"]) == 7.5
 
 
 # ===========================================================================
@@ -362,6 +405,21 @@ class TestPlotLossPanel:
         assert ax.get_yscale() == "log"
         plt.close(fig)
 
+# =========================================================================
+# plot_loss – show=True / save_folder=None paths
+# ==========================================================================
+
+class TestPlotLossExtraPaths:
+    def test_no_save_folder_does_not_write_file(self, tmp_path):
+        """With save_folder=None nothing should be written to disk."""
+        plot_loss([1.0, 0.5, 0.1], save_folder=None, show=False)
+        assert list(tmp_path.iterdir()) == []
+
+    def test_descending_loss(self, tmp_path):
+        """Monotonically decreasing loss should still produce a valid PNG."""
+        plot_loss(list(np.logspace(0, -3, 20)), save_folder=str(tmp_path))
+        assert (tmp_path / "loss_history.png").exists()
+
 
 # ===========================================================================
 # build_velocity_radius_kde
@@ -425,7 +483,7 @@ class TestBuildVelocityRadiusKde:
 
 
 # ===========================================================================
-# plot_param_uncertainties (smoke)
+# plot_param_uncertainties
 # ===========================================================================
 
 
@@ -442,10 +500,20 @@ class TestPlotParamUncertainties:
             ["r0"], np.array([100.0]), np.array([5.0]), save_folder=str(tmp_path)
         )
         assert (tmp_path / "parameter_uncertainties.png").exists()
+        
+    def test_uncertainties_show_true(self):
+        plot_param_uncertainties(
+            ["r0", "mass"],
+            np.array([100.0, 1.0]),
+            np.array([5.0, 0.1]),
+            save_folder=None,
+            show=True,
+        )
+        plt.close("all")
 
 
 # ===========================================================================
-# plot_param_correlations (smoke + correctness)
+# plot_param_correlations 
 # ===========================================================================
 
 
@@ -478,6 +546,15 @@ class TestPlotParamCorrelations:
         plot_param_correlations(
             ["a", "b"], cov, annotate=False, save_folder=str(tmp_path)
         )
+
+    def test_correlations_show_true(self):
+        plot_param_correlations(
+            ["r0", "mass"],
+            np.eye(2),
+            save_folder=None,
+            show=True,
+        )
+        plt.close("all")
 
 
 # ===========================================================================
@@ -535,3 +612,478 @@ class TestSampleParameterSetsFromCovariance:
         params, cov, keys = simple_setup
         samples = sample_parameter_sets_from_covariance(params, cov, keys, n_samples=1)
         assert samples.shape == (1, 2)
+
+
+# ===========================================================================
+# _ensure_clean_dir – subdirectory preservation
+# ===========================================================================
+
+class TestEnsureCleanDirSubdirs:
+    def test_subdirectories_are_not_removed(self, tmp_path):
+        """_ensure_clean_dir should only delete *files*, not child directories."""
+        d = tmp_path / "parent"
+        d.mkdir()
+        child_dir = d / "subdir"
+        child_dir.mkdir()
+        (d / "file.txt").write_text("x")
+        _ensure_clean_dir(str(d))
+        # file is gone, subdir survives
+        assert not (d / "file.txt").exists()
+        assert child_dir.exists()
+
+# ===========================================================================
+# build_velocity_radius_kde – sigma_levels parameter
+# ===========================================================================
+
+class TestBuildVelocityRadiusKdeSigmaLevels:
+    def test_custom_sigma_levels_change_number_of_contour_levels(self):
+        rng = np.random.default_rng(1)
+        ra  = rng.uniform(-5, 5, 60)
+        dec = rng.uniform(-5, 5, 60)
+        v   = rng.uniform(-10, 10, 60)
+        result_default = build_velocity_radius_kde(ra, dec, v)
+        result_custom  = build_velocity_radius_kde(ra, dec, v, sigma_levels=[1.0, 2.0, 3.0])
+        # default uses np.arange(1.0, 2.1, 0.5) -> 4 levels
+        # custom uses 3 sigma values -> also 4 levels, check the actual level count differs
+        # when sigma values differ the contour threshold values differ
+        assert not np.allclose(result_default["levels"], result_custom["levels"])
+
+    def test_zz_max_is_one(self):
+        rng = np.random.default_rng(2)
+        ra  = rng.uniform(0, 10, 80)
+        dec = rng.uniform(0, 10, 80)
+        v   = rng.uniform(0, 5, 80)
+        result = build_velocity_radius_kde(ra, dec, v)
+        assert pytest.approx(float(np.nanmax(result["zz"])), abs=1e-9) == 1.0
+
+
+# ===========================================================================
+# plot_morphology – smoke tests for uncovered branches
+# ===========================================================================
+
+class TestPlotMorphologySmoke:
+    """Smoke tests: check the function runs and either saves a file or closes cleanly."""
+
+    def test_minimal_no_streamer_no_model(self, tmp_path):
+        """Call with only save_folder set; no streamer, no model."""
+        plot_morphology(save_folder=str(tmp_path), save_name="minimal", show=False)
+        assert (tmp_path / "minimal.png").exists()
+
+    def test_with_model_curve_only(self, tmp_path):
+        ra_m  = np.linspace(1, 5, 20)
+        dec_m = np.linspace(1, 5, 20)
+        plot_morphology(
+            ra_model=ra_m, dec_model=dec_m,
+            save_folder=str(tmp_path), save_name="model_only", show=False,
+        )
+        assert (tmp_path / "model_only.png").exists()
+
+    def test_with_streamer(self, tmp_path):
+        s = _make_streamer()
+        plot_morphology(
+            streamer=s,
+            ra_model=np.linspace(1, 5, 20),
+            dec_model=np.linspace(1, 5, 20),
+            save_folder=str(tmp_path),
+            save_name="with_streamer",
+            show=False,
+        )
+        assert (tmp_path / "with_streamer.png").exists()
+
+    def test_with_model_interp_and_valid(self, tmp_path):
+        s = _make_streamer()
+        n = len(s.ra_data)
+        plot_morphology(
+            streamer=s,
+            ra_model=np.linspace(1, 5, 20),
+            dec_model=np.linspace(1, 5, 20),
+            ra_model_interp=s.ra_data,
+            dec_model_interp=s.dec_data,
+            valid=np.ones(n, dtype=bool),
+            save_folder=str(tmp_path),
+            save_name="with_interp",
+            show=False,
+        )
+        assert (tmp_path / "with_interp.png").exists()
+
+    def test_with_by_eye(self, tmp_path):
+        """Exercise the by_eye branch."""
+        s = _make_streamer()
+        by_eye = (np.linspace(0, 6, 20), np.linspace(0, 6, 20), np.zeros(20))
+        plot_morphology(
+            streamer=s,
+            ra_model=np.linspace(1, 5, 20),
+            dec_model=np.linspace(1, 5, 20),
+            by_eye=by_eye,
+            save_folder=str(tmp_path),
+            save_name="with_by_eye",
+            show=False,
+        )
+        assert (tmp_path / "with_by_eye.png").exists()
+
+    def test_with_bg_rgba(self, tmp_path):
+        """Exercise the pre-rendered background branch."""
+        s = _make_streamer()
+        # create a dummy RGBA background image
+        bg_rgba = np.zeros((100, 100, 4), dtype=np.uint8)
+        bg_extent = [0.0, 8.0, 0.0, 8.0]
+        plot_morphology(
+            streamer=s,
+            bg_rgba=bg_rgba,
+            bg_extent=bg_extent,
+            xlim=(0, 8),
+            ylim=(0, 8),
+            save_folder=str(tmp_path),
+            save_name="with_bg",
+            show=False,
+        )
+        assert (tmp_path / "with_bg.png").exists()
+
+    def test_explicit_xlim_ylim(self, tmp_path):
+        s = _make_streamer()
+        plot_morphology(
+            streamer=s,
+            ra_model=np.linspace(1, 5, 10),
+            dec_model=np.linspace(1, 5, 10),
+            xlim=(0.0, 10.0),
+            ylim=(0.0, 10.0),
+            save_folder=str(tmp_path),
+            save_name="explicit_lim",
+            show=False,
+        )
+        assert (tmp_path / "explicit_lim.png").exists()
+
+    def test_no_sigma_data_only(self, tmp_path):
+        """Streamer with sigma=None falls through to ax.plot branch."""
+        import types
+        rng = np.random.default_rng(7)
+        s = types.SimpleNamespace(
+            ra_data=rng.uniform(1, 5, 6),
+            dec_data=rng.uniform(1, 5, 6),
+            v_data=rng.uniform(-2, 2, 6),
+            ra_sigma=None,
+            dec_sigma=None,
+            v_sigma=None,
+            pc_coords=(rng.uniform(0, 8, 20), rng.uniform(0, 8, 20), rng.uniform(-3, 3, 20)),
+            data=None, uncertainties=None,
+        )
+        plot_morphology(
+            streamer=s,
+            xlim=(0, 8), ylim=(0, 8),
+            save_folder=str(tmp_path),
+            save_name="no_sigma",
+            show=False,
+        )
+        assert (tmp_path / "no_sigma.png").exists()
+
+
+# ===========================================================================
+# plot_ra_vel – smoke tests
+# ===========================================================================
+
+class TestPlotRaVelSmoke:
+    def test_model_only(self, tmp_path):
+        ra_m = np.linspace(1, 5, 20)
+        v_m  = np.linspace(-2, 2, 20)
+        plot_ra_vel(ra_m, v_m, save_folder=str(tmp_path), save_name="ra_vel_basic")
+        assert (tmp_path / "ra_vel_basic.png").exists()
+
+    def test_with_streamer(self, tmp_path):
+        s = _make_streamer()
+        plot_ra_vel(
+            np.linspace(1, 5, 20),
+            np.linspace(-2, 2, 20),
+            streamer=s,
+            save_folder=str(tmp_path),
+            save_name="ra_vel_streamer",
+        )
+        assert (tmp_path / "ra_vel_streamer.png").exists()
+
+    def test_with_interp_and_valid(self, tmp_path):
+        s = _make_streamer()
+        n = len(s.ra_data)
+        plot_ra_vel(
+            np.linspace(1, 5, 20),
+            np.linspace(-2, 2, 20),
+            streamer=s,
+            ra_model_interp=s.ra_data,
+            v_model_interp=s.v_data,
+            valid=np.ones(n, dtype=bool),
+            save_folder=str(tmp_path),
+            save_name="ra_vel_interp",
+        )
+        assert (tmp_path / "ra_vel_interp.png").exists()
+
+    def test_with_vlim_ralim(self, tmp_path):
+        plot_ra_vel(
+            np.linspace(0, 5, 15),
+            np.linspace(-1, 1, 15),
+            vlim=(-5.0, 5.0),
+            ralim=(0.0, 10.0),
+            save_folder=str(tmp_path),
+            save_name="ra_vel_lim",
+        )
+        assert (tmp_path / "ra_vel_lim.png").exists()
+
+    def test_no_sigma_streamer(self, tmp_path):
+        """streamer without sigmas falls through to ax.plot branch."""
+        import types
+        rng = np.random.default_rng(9)
+        s = types.SimpleNamespace(
+            ra_data=rng.uniform(1, 5, 6),
+            dec_data=rng.uniform(1, 5, 6),
+            v_data=rng.uniform(-2, 2, 6),
+            ra_sigma=None,
+            dec_sigma=None,
+            v_sigma=None,
+            pc_coords=(rng.uniform(0, 8, 20), rng.uniform(0, 8, 20), rng.uniform(-3, 3, 20)),
+            data=None, uncertainties=None,
+        )
+        plot_ra_vel(
+            np.linspace(1, 5, 10),
+            np.linspace(-1, 1, 10),
+            streamer=s,
+            save_folder=str(tmp_path),
+            save_name="ra_vel_no_sigma",
+        )
+        assert (tmp_path / "ra_vel_no_sigma.png").exists()
+
+    def test_with_model_keep_mask(self, tmp_path):
+        """model_keep mask filters the plotted model points."""
+        ra_m = np.linspace(0, 6, 20)
+        v_m  = np.linspace(-3, 3, 20)
+        keep = np.ones(20, dtype=bool)
+        keep[:5] = False
+        plot_ra_vel(
+            ra_m, v_m,
+            model_keep=keep,
+            save_folder=str(tmp_path),
+            save_name="ra_vel_keep",
+        )
+        assert (tmp_path / "ra_vel_keep.png").exists()
+
+
+# ===========================================================================
+# plot_dec_vel – smoke tests
+# ===========================================================================
+
+class TestPlotDecVelSmoke:
+    def test_model_only(self, tmp_path):
+        dec_m = np.linspace(1, 5, 20)
+        v_m   = np.linspace(-2, 2, 20)
+        plot_dec_vel(dec_m, v_m, save_folder=str(tmp_path), save_name="dec_vel_basic")
+        assert (tmp_path / "dec_vel_basic.png").exists()
+
+    def test_with_streamer(self, tmp_path):
+        s = _make_streamer()
+        plot_dec_vel(
+            np.linspace(1, 5, 20),
+            np.linspace(-2, 2, 20),
+            streamer=s,
+            save_folder=str(tmp_path),
+            save_name="dec_vel_streamer",
+        )
+        assert (tmp_path / "dec_vel_streamer.png").exists()
+
+    def test_with_interp_and_valid(self, tmp_path):
+        s = _make_streamer()
+        n = len(s.dec_data)
+        plot_dec_vel(
+            np.linspace(1, 5, 20),
+            np.linspace(-2, 2, 20),
+            streamer=s,
+            dec_model_interp=s.dec_data,
+            v_model_interp=s.v_data,
+            valid=np.ones(n, dtype=bool),
+            save_folder=str(tmp_path),
+            save_name="dec_vel_interp",
+        )
+        assert (tmp_path / "dec_vel_interp.png").exists()
+
+    def test_vlim_declim(self, tmp_path):
+        plot_dec_vel(
+            np.linspace(0, 5, 10),
+            np.linspace(-1, 1, 10),
+            vlim=(-5.0, 5.0),
+            declim=(0.0, 8.0),
+            save_folder=str(tmp_path),
+            save_name="dec_vel_lim",
+        )
+        assert (tmp_path / "dec_vel_lim.png").exists()
+
+    def test_no_sigma_streamer(self, tmp_path):
+        """Streamer without sigmas falls through to ax.plot."""
+        import types
+        rng = np.random.default_rng(11)
+        s = types.SimpleNamespace(
+            ra_data=rng.uniform(1, 5, 6),
+            dec_data=rng.uniform(1, 5, 6),
+            v_data=rng.uniform(-2, 2, 6),
+            ra_sigma=None,
+            dec_sigma=None,
+            v_sigma=None,
+            pc_coords=(rng.uniform(0, 8, 20), rng.uniform(0, 8, 20), rng.uniform(-3, 3, 20)),
+            data=None, uncertainties=None,
+        )
+        plot_dec_vel(
+            np.linspace(1, 5, 10),
+            np.linspace(-1, 1, 10),
+            streamer=s,
+            save_folder=str(tmp_path),
+            save_name="dec_vel_no_sigma",
+        )
+        assert (tmp_path / "dec_vel_no_sigma.png").exists()
+
+    def test_show_false_no_save_folder(self, tmp_path):
+        """With save_folder=None and show=False the figure should be closed."""
+        before = plt.get_fignums()
+        plot_dec_vel(
+            np.linspace(1, 5, 10),
+            np.linspace(-1, 1, 10),
+            save_folder=None,
+            show=False,
+        )
+        after = plt.get_fignums()
+        assert len(after) <= len(before)
+
+
+# ===========================================================================
+# plot_vel_radius – smoke tests
+# ===========================================================================
+
+class TestPlotVelRadiusSmoke:
+    def test_basic(self, tmp_path):
+        s = _make_streamer()
+        ra_m  = np.linspace(0.5, 5.0, 30)
+        dec_m = np.linspace(0.5, 5.0, 30)
+        v_m   = np.linspace(-3.0, 3.0, 30)
+        plot_vel_radius(
+            ra_m, dec_m, v_m,
+            streamer=s,
+            save_folder=str(tmp_path),
+            save_name="vel_radius_basic",
+        )
+        assert (tmp_path / "vel_radius_basic.png").exists()
+
+    def test_with_interp_and_valid(self, tmp_path):
+        s = _make_streamer()
+        n = len(s.ra_data)
+        ra_m  = np.linspace(0.5, 5.0, 30)
+        dec_m = np.linspace(0.5, 5.0, 30)
+        v_m   = np.linspace(-3.0, 3.0, 30)
+        plot_vel_radius(
+            ra_m, dec_m, v_m,
+            streamer=s,
+            ra_model_interp=s.ra_data,
+            dec_model_interp=s.dec_data,
+            v_model_interp=s.v_data,
+            valid=np.ones(n, dtype=bool),
+            save_folder=str(tmp_path),
+            save_name="vel_radius_interp",
+        )
+        assert (tmp_path / "vel_radius_interp.png").exists()
+
+    def test_with_velocity_reference(self, tmp_path):
+        s = _make_streamer()
+        plot_vel_radius(
+            np.linspace(1, 5, 20),
+            np.linspace(1, 5, 20),
+            np.linspace(-2, 2, 20),
+            streamer=s,
+            velocity_reference=0.5,
+            save_folder=str(tmp_path),
+            save_name="vel_radius_vlsr",
+        )
+        assert (tmp_path / "vel_radius_vlsr.png").exists()
+
+    def test_with_by_eye(self, tmp_path):
+        """Exercise the by_eye branch in plot_vel_radius."""
+        s = _make_streamer()
+        by_eye = (
+            np.linspace(0.5, 5, 20),
+            np.linspace(0.5, 5, 20),
+            np.linspace(-1, 1, 20),
+        )
+        plot_vel_radius(
+            np.linspace(1, 5, 20),
+            np.linspace(1, 5, 20),
+            np.linspace(-2, 2, 20),
+            streamer=s,
+            by_eye=by_eye,
+            save_folder=str(tmp_path),
+            save_name="vel_radius_by_eye",
+        )
+        assert (tmp_path / "vel_radius_by_eye.png").exists()
+
+    def test_with_model_keep_mask(self, tmp_path):
+        """model_keep masks out part of the model before plotting rproj."""
+        s = _make_streamer()
+        ra_m  = np.linspace(0, 6, 30)
+        dec_m = np.linspace(0, 6, 30)
+        v_m   = np.linspace(-3, 3, 30)
+        keep  = np.ones(30, dtype=bool)
+        keep[:5] = False
+        plot_vel_radius(
+            ra_m, dec_m, v_m,
+            streamer=s,
+            model_keep=keep,
+            save_folder=str(tmp_path),
+            save_name="vel_radius_keep",
+        )
+        assert (tmp_path / "vel_radius_keep.png").exists()
+
+    def test_explicit_kde_background_skips_rebuild(self, tmp_path):
+        """Passing a pre-built kde_background should skip the auto-build branch."""
+        s = _make_streamer()
+        rng = np.random.default_rng(3)
+        kde = build_velocity_radius_kde(s.ra_data, s.dec_data, s.v_data)
+        plot_vel_radius(
+            np.linspace(1, 5, 20),
+            np.linspace(1, 5, 20),
+            np.linspace(-2, 2, 20),
+            streamer=s,
+            kde_background=kde,
+            save_folder=str(tmp_path),
+            save_name="vel_radius_kde",
+        )
+        assert (tmp_path / "vel_radius_kde.png").exists()
+
+    def test_explicit_xlim_ylim(self, tmp_path):
+        s = _make_streamer()
+        plot_vel_radius(
+            np.linspace(1, 5, 20),
+            np.linspace(1, 5, 20),
+            np.linspace(-2, 2, 20),
+            streamer=s,
+            xlim=(0.0, 10.0),
+            ylim=(-5.0, 5.0),
+            save_folder=str(tmp_path),
+            save_name="vel_radius_lim",
+        )
+        assert (tmp_path / "vel_radius_lim.png").exists()
+
+    def test_no_sigma_data(self, tmp_path):
+        """Streamer without sigmas uses the bare ax.plot path for data."""
+        import types
+        rng = np.random.default_rng(13)
+        s = types.SimpleNamespace(
+            ra_data=rng.uniform(1, 5, 6),
+            dec_data=rng.uniform(1, 5, 6),
+            v_data=rng.uniform(-2, 2, 6),
+            ra_sigma=None,
+            dec_sigma=None,
+            v_sigma=None,
+            pc_coords=None,
+            data=None, uncertainties=None,
+        )
+        plot_vel_radius(
+            np.linspace(1, 5, 10),
+            np.linspace(1, 5, 10),
+            np.linspace(-1, 1, 10),
+            streamer=s,
+            save_folder=str(tmp_path),
+            save_name="vel_radius_no_sigma",
+        )
+        assert (tmp_path / "vel_radius_no_sigma.png").exists()
+
+
