@@ -11,7 +11,7 @@ jobs:
         # os: [ubuntu-latest, windows-latest, macos-latest]
         # Cannot use windows-latest, because LaTeX is missing
         os: [ubuntu-latest, macos-latest]
-        python-version: ["3.12", "3.13", "3.14", "3.15-dev"]
+        python-version: ["3.12", "3.13", "3.14"] # , "3.15-dev"] no 3.15 yet
 
     name: Test
     runs-on: ${{ matrix.os }}
